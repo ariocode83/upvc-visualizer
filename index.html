@@ -1,0 +1,222 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Upload, 
+  Sparkles, 
+  Image as ImageIcon, 
+  Trash2, 
+  Download, 
+  Wand2, 
+  Share2, 
+  Copy,
+  Palette
+} from 'lucide-react';
+
+// --- Konfigurasi Mock ---
+// Saat deploy ke Netlify, disarankan menggunakan Environment Variables (process.env.REACT_APP_GEMINI_API_KEY)
+const apiKey = ""; 
+
+const App = () => {
+  // State Management - Tetap di Dark Mode secara permanen
+  const [isLoading, setIsLoading] = useState(false);
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  
+  // Product Maker State
+  const [productImage, setProductImage] = useState(null);
+  const [productPrompt, setProductPrompt] = useState("");
+  const [resultImage, setResultImage] = useState(null);
+
+  // --- Gemini API Functions ---
+
+  // 1. Mempercantik Prompt (Prompt Enhancer)
+  const enhancePrompt = async () => {
+    if (!productPrompt) return;
+    setIsEnhancing(true);
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `Tulis ulang prompt desain ini agar lebih detail, menggunakan istilah arsitektur mewah, pencahayaan alami, dan estetika interior tinggi dalam Bahasa Inggris: "${productPrompt}". Berikan hanya hasil promptnya saja.` }] }]
+        })
+      });
+      const data = await response.json();
+      const enhancedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (enhancedText) setProductPrompt(enhancedText.trim());
+    } catch (error) {
+      console.error("Gagal meningkatkan prompt:", error);
+    } finally {
+      setIsEnhancing(false);
+    }
+  };
+
+  const generateProductPhoto = async () => {
+    if (!productImage || !productPrompt) return;
+    setIsLoading(true);
+    
+    try {
+      const base64Data = productImage.split(',')[1];
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: `Integrasikan produk UPVC premium ini ke dalam desain interior sesuai instruksi: ${productPrompt}. Pastikan hasil akhir terlihat fotorealistik, mewah, tenang, dengan pencahayaan alami yang elegan khas hunian high-end.` },
+              { inlineData: { mimeType: "image/png", data: base64Data } }
+            ]
+          }],
+          generationConfig: { responseModalities: ['TEXT', 'IMAGE'] }
+        })
+      });
+
+      const result = await response.json();
+      const generatedBase64 = result.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+      
+      if (generatedBase64) {
+        setResultImage(`data:image/png;base64,${generatedBase64}`);
+      }
+    } catch (error) {
+      console.error("Gagal membuat visualisasi:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFileUpload = (e) => {
+    const files = Array.from(e.target.files);
+    if (!files[0]) return;
+    const reader = new FileReader();
+    reader.onload = (event) => setProductImage(event.target.result);
+    reader.readAsDataURL(files[0]);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white transition-colors duration-300 font-sans">
+      
+      {/* Navbar */}
+      <nav className="sticky top-0 z-50 border-b bg-slate-950/80 border-slate-800 backdrop-blur-md">
+        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-blue-700 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <Sparkles className="text-white w-6 h-6" />
+            </div>
+            <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-indigo-200 bg-clip-text text-transparent">
+              Upvc Visualizer
+            </span>
+          </div>
+          
+          <div className="flex items-center gap-4 text-xs opacity-50">
+            NoiseGard Premium
+          </div>
+        </div>
+      </nav>
+
+      <main className="max-w-7xl mx-auto px-4 py-8 relative">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start mt-4">
+          <div className="p-6 rounded-3xl border bg-slate-900 border-slate-800 shadow-2xl">
+            {/* Bagian judul "Generate" */}
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 mb-6 text-indigo-400">
+               <Palette size={16} />
+               <span className="text-sm font-bold uppercase tracking-wider">Generate</span>
+            </div>
+            
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium mb-2 opacity-70">Unggah Foto Pintu/Jendela</label>
+                {!productImage ? (
+                  <label className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-2xl cursor-pointer transition-colors border-slate-700 bg-slate-800/50 hover:bg-slate-800">
+                    <Upload className="w-10 h-10 mb-3 text-blue-500" />
+                    <p className="text-sm font-medium">Klik untuk unggah foto aset anda</p>
+                    <p className="text-xs mt-1 opacity-50">Mendukung PNG, JPG, JPEG</p>
+                    <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
+                  </label>
+                ) : (
+                  <div className="relative group rounded-2xl overflow-hidden h-64 bg-black/20">
+                    <img src={productImage} alt="Preview" className="w-full h-full object-contain" />
+                    <button onClick={() => setProductImage(null)} className="absolute top-2 right-2 p-2 bg-red-500/80 hover:bg-red-500 text-white rounded-full transition-colors"><Trash2 size={16} /></button>
+                  </div>
+                )}
+              </div>
+
+              <div className="relative">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-medium opacity-70">Instruksi Visualisasi</label>
+                  <button 
+                    onClick={enhancePrompt}
+                    disabled={!productPrompt || isEnhancing}
+                    className="text-xs text-blue-400 flex items-center gap-1 hover:text-blue-300 disabled:opacity-50"
+                  >
+                    <Wand2 size={12}/> {isEnhancing ? 'Meningkatkan...' : 'Perbagus Prompt ✨'}
+                  </button>
+                </div>
+                <textarea 
+                  value={productPrompt}
+                  onChange={(e) => setProductPrompt(e.target.value)}
+                  placeholder="Contoh: Ganti jendela kayu di atas menjadi jendela UPVC putih minimalis dengan kaca clear di ruang tamu mewah..."
+                  className="w-full p-4 rounded-xl border focus:ring-2 focus:ring-blue-500 outline-none h-32 resize-none transition-all bg-slate-800 border-slate-700 text-white"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button 
+                  disabled={!productImage || !productPrompt || isLoading}
+                  onClick={generateProductPhoto}
+                  className="w-full py-4 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-widest"
+                >
+                  {isLoading ? (
+                    <div className="flex items-center gap-3">
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      <span>Sedang Memproses...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <Sparkles size={20} /> Generate
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 rounded-3xl border h-full flex flex-col min-h-[500px] bg-slate-900 border-slate-800 shadow-2xl">
+            {!resultImage && !isLoading ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center opacity-40">
+                <ImageIcon size={40} className="mb-4" />
+                <p>Hasil visualisasi akan muncul di sini</p>
+                <p className="text-xs mt-2 px-10">Tulis instruksi di panel kiri dan klik tombol untuk memulai</p>
+              </div>
+            ) : isLoading ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center">
+                <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="font-bold text-lg animate-pulse bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">Mewujudkan Desain...</p>
+                <p className="text-sm opacity-60 mt-2">AI sedang mengintegrasikan elemen arsitektur premium</p>
+              </div>
+            ) : (
+              <div className="w-full h-full flex flex-col">
+                <div className="flex-1 rounded-2xl overflow-hidden bg-black/20 mb-4 border border-slate-800 shadow-inner">
+                  <img src={resultImage} alt="Result" className="w-full h-full object-contain" />
+                </div>
+                
+                <div className="flex gap-2">
+                  <button className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-50 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95">
+                    <Download size={20} /> Unduh Hasil
+                  </button>
+                  <button className="p-4 rounded-xl border transition-all active:scale-95 border-slate-700 bg-slate-800 hover:bg-slate-700">
+                    <Share2 size={20} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+
+      <footer className="py-12 text-center opacity-40 text-sm">
+        <p>2025 Upvc Visualizer by High-End Solutions</p>
+        <p className="mt-1">Powered by Gemini AI Technology ✨</p>
+      </footer>
+    </div>
+  );
+};
+
+export default App;
